@@ -292,16 +292,32 @@ async def main():
 
 if __name__ == "__main__":
     import asyncio
+    from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters
+    import logging
+    from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, Application
 
-    async def safe_main():
-        try:
-            await main()
-        except RuntimeError as e:
-            if "event loop is already running" in str(e):
-                loop = asyncio.get_event_loop()
-                loop.create_task(main())
-                loop.run_forever()
-            else:
-                raise
+    async def main():
+        app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 
-    asyncio.run(safe_main())
+        # === Handlers (keep your actual handlers here) ===
+        app.add_handler(CommandHandler("start", start))
+        app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+        # ==================================================
+
+        # === Scheduler (your job queue setup) ===
+        job_queue = app.job_queue
+        if job_queue:
+            job_queue.run_repeating(send_scheduled_messages, interval=30, first=10)
+
+        logging.info("💬 Hiro mimic bot running (SGT).")
+
+        # === Proper async startup for Render ===
+        await app.initialize()
+        await app.start()
+        await app.updater.start_polling()
+        await idle()  # keeps the bot running
+
+        await app.stop()
+        await app.shutdown()
+
+    asyncio.run(main())

@@ -293,9 +293,15 @@ async def main():
 if __name__ == "__main__":
     import asyncio
 
-    try:
-        asyncio.run(main())
-    except RuntimeError:
-        # fallback for event loop already running (Render sometimes keeps one open)
-        loop = asyncio.get_event_loop()
-        loop.run_until_complete(main())
+    async def safe_main():
+        try:
+            await main()
+        except RuntimeError as e:
+            if "event loop is already running" in str(e):
+                loop = asyncio.get_event_loop()
+                loop.create_task(main())
+                loop.run_forever()
+            else:
+                raise
+
+    asyncio.run(safe_main())

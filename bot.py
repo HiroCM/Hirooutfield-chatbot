@@ -208,7 +208,7 @@ async def schedule(update: Update, context: ContextTypes.DEFAULT_TYPE):
         time_str = context.args[1]
         message = " ".join(context.args[2:])
 
-        # Parse to datetime in Singapore time
+        # Parse datetime in Singapore time
         send_time = SGT.localize(datetime.strptime(f"{date_str} {time_str}", "%Y-%m-%d %H:%M"))
         now = datetime.now(SGT)
 
@@ -216,17 +216,17 @@ async def schedule(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("That time already pass liao 😅 choose a future time.")
             return
 
-        # Save schedule persistently
+        # Always broadcast to HER chat only
         data = load_schedules()
         data.append({
             "time": send_time.isoformat(),
-            "chat_id": update.message.chat_id,
+            "chat_id": 512984392,  # replace with her chat_id
             "message": message
         })
         save_schedules(data)
 
         await update.message.reply_text(
-            f"✅ Scheduled for {send_time.strftime('%Y-%m-%d %H:%M %Z')}:\n“{message}”"
+            f"✅ Scheduled for {send_time.strftime('%Y-%m-%d %H:%M %Z')}:\n“{message}” (will be sent to her)"
         )
 
     except Exception as e:

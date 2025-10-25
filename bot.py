@@ -277,8 +277,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # =========================
 def main():
     app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
-    ...
-    app.run_polling()
 
     # Commands
     app.add_handler(CommandHandler("schedule", schedule))
@@ -294,7 +292,7 @@ def main():
     job_queue.run_repeating(send_scheduled_messages, interval=30, first=10)
 
     logger.info("💬 Hiro mimic bot running (SGT).")
-    await app.run_polling()
+    app.run_polling()   # ✅ No "await" needed here!
 
 
 if __name__ == "__main__":

@@ -44,11 +44,17 @@ logger = logging.getLogger(__name__)
 load_dotenv()
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-BOT_TOKEN = os.getenv("BOT_TOKEN")
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
+if not TELEGRAM_TOKEN:
+    raise ValueError("❌ TELEGRAM_TOKEN not found in environment")
 JSONBIN_API_KEY = os.getenv("JSONBIN_API_KEY")
 MEMORY_BIN_ID = os.getenv("MEMORY_BIN_ID")
 LOGS_BIN_ID = os.getenv("LOGS_BIN_ID")
 SCHEDULES_BIN_ID = os.getenv("SCHEDULES_BIN_ID")
+
+print("🔍 DEBUG: TELEGRAM_TOKEN loaded:", bool(os.getenv("TELEGRAM_TOKEN")))
+print("🔍 DEBUG: OPENAI_API_KEY loaded:", bool(os.getenv("OPENAI_API_KEY")))
+print("🔍 DEBUG: JSONBIN_API_KEY loaded:", bool(os.getenv("JSONBIN_API_KEY")))
 
 # Fine-tuned model ID
 MODEL_ID = "ft:gpt-4o-mini-2024-07-18:hiro-personal::CUF00Odk"
@@ -271,7 +277,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # =========================
 async def main():
     """Builds and starts the Telegram bot."""
-    app = ApplicationBuilder().token(BOT_TOKEN).build()
+    app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 
     # Commands
     app.add_handler(CommandHandler("schedule", schedule))
@@ -292,32 +298,4 @@ async def main():
 
 if __name__ == "__main__":
     import asyncio
-    from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters
-    import logging
-    from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, Application
-
-    async def main():
-        app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
-
-        # === Handlers (keep your actual handlers here) ===
-        app.add_handler(CommandHandler("start", start))
-        app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-        # ==================================================
-
-        # === Scheduler (your job queue setup) ===
-        job_queue = app.job_queue
-        if job_queue:
-            job_queue.run_repeating(send_scheduled_messages, interval=30, first=10)
-
-        logging.info("💬 Hiro mimic bot running (SGT).")
-
-        # === Proper async startup for Render ===
-        await app.initialize()
-        await app.start()
-        await app.updater.start_polling()
-        await idle()  # keeps the bot running
-
-        await app.stop()
-        await app.shutdown()
-
     asyncio.run(main())

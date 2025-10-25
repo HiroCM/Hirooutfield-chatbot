@@ -1,191 +1,295 @@
+"""
+Hiro's Telegram Chatbot (Final JSONBin Persistent Version)
+----------------------------------------------------------
+This bot mimics your tone using your fine-tuned OpenAI model and remembers the conversation
+even after reboots using JSONBin cloud storage. It reads idle messages from a text file,
+handles scheduled messages, and can send chat logs on request.
+"""
+
+# =========================
+# 1️⃣ IMPORTS & SETUP
+# =========================
 import os
 import json
+import pytz
 import random
 import logging
-import pytz
+import requests
 from datetime import datetime, timedelta
-from telegram import Update
-from telegram.ext import (
-    ApplicationBuilder,
-    MessageHandler,
-    CommandHandler,
-    ContextTypes,
-    filters,
-)
-from openai import OpenAI
-import asyncio
 from dotenv import load_dotenv
+from openai import OpenAI
+from telegram import Update, InputFile
+from telegram.ext import (
+    ApplicationBuilder, CommandHandler, MessageHandler,
+    ContextTypes, filters
+)
 
-load_dotenv()
-
-# --- Logging setup ---
+# Logging for visibility on Render
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    level=logging.INFO,
+    level=logging.INFO
 )
 logger = logging.getLogger(__name__)
 
-# --- Environment variables ---
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+# =========================
+# 2️⃣ LOAD ENV VARIABLES
+# =========================
+# The .env file should contain:
+# OPENAI_API_KEY=sk-...
+# BOT_TOKEN=...
+# JSONBIN_API_KEY=...
+# MEMORY_BIN_ID=...
+# LOGS_BIN_ID=...
+# SCHEDULES_BIN_ID=...
+load_dotenv()
 
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+JSONBIN_API_KEY = os.getenv("JSONBIN_API_KEY")
+MEMORY_BIN_ID = os.getenv("MEMORY_BIN_ID")
+LOGS_BIN_ID = os.getenv("LOGS_BIN_ID")
+SCHEDULES_BIN_ID = os.getenv("SCHEDULES_BIN_ID")
+
+# Fine-tuned model ID
+MODEL_ID = "ft:gpt-4o-mini-2024-07-18:hiro-personal::CUF00Odk"
+
+# Initialize OpenAI client
 client = OpenAI(api_key=OPENAI_API_KEY)
 
-# --- Your fine-tuned model ID (replace when ready) ---
-FINE_TUNE_MODEL = "ft:gpt-4o-mini-2024-07-18:hiro-personal::CUF00Odk"
+# Timezone for all timestamps
+SGT = pytz.timezone("Asia/Singapore")
 
-# --- Timezone setup ---
-SINGAPORE_TZ = pytz.timezone("Asia/Singapore")
+# Telegram user ID allowed to use /sendlog
+OWNER_ID = 713470736
 
-# --- Schedule file ---
-SCHEDULE_FILE = "schedules.json"
 
-# --- Load schedules from file ---
-def load_schedules():
-    if os.path.exists(SCHEDULE_FILE):
-        with open(SCHEDULE_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
+# =========================
+# 3️⃣ JSONBIN HELPERS
+# =========================
+# These handle cloud read/write operations so data persists through reboots.
+
+def jsonbin_url(bin_id):
+    return f"https://api.jsonbin.io/v3/b/{bin_id}"
+
+def load_json_from_bin(bin_id):
+    """Reads JSON data from JSONBin."""
+    try:
+        headers = {"X-Master-Key": JSONBIN_API_KEY}
+        r = requests.get(jsonbin_url(bin_id), headers=headers)
+        if r.status_code == 200:
+            return r.json()["record"].get("data", [])
+    except Exception as e:
+        logger.error(f"Error reading bin {bin_id}: {e}")
     return []
 
-# --- Save schedules to file ---
-def save_schedules(schedules):
-    with open(SCHEDULE_FILE, "w", encoding="utf-8") as f:
-        json.dump(schedules, f, indent=2)
-
-# --- Schedule handler ---
-async def send_scheduled_messages(app):
-    while True:
-        now = datetime.now(SINGAPORE_TZ)
-        schedules = load_schedules()
-        remaining = []
-
-        for s in schedules:
-            send_time = datetime.fromisoformat(s["time"])
-            if now >= send_time:
-                try:
-                    await app.bot.send_message(chat_id=s["chat_id"], text=s["message"])
-                    logger.info(f"Sent scheduled message: {s['message']}")
-                except Exception as e:
-                    logger.error(f"Failed to send message: {e}")
-            else:
-                remaining.append(s)
-
-        save_schedules(remaining)
-        await asyncio.sleep(30)  # check every 30s
-
-# --- Add new schedule command ---
-async def schedule_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+def save_json_to_bin(bin_id, data):
+    """Writes JSON data to JSONBin."""
     try:
-        if len(context.args) < 3:
-            await update.message.reply_text("Usage: /schedule YYYY-MM-DD HH:MM message")
-            return
-
-        date_str, time_str, *msg_parts = context.args
-        message = " ".join(msg_parts)
-        dt_str = f"{date_str} {time_str}"
-        dt = SINGAPORE_TZ.localize(datetime.strptime(dt_str, "%Y-%m-%d %H:%M"))
-
-        schedules = load_schedules()
-        schedules.append({
-            "chat_id": update.message.chat_id,
-            "time": dt.isoformat(),
-            "message": message
-        })
-        save_schedules(schedules)
-
-        await update.message.reply_text(f"Scheduled message at {dt_str} SG time.")
-        logger.info(f"New schedule added for {dt_str}: {message}")
-
+        headers = {
+            "Content-Type": "application/json",
+            "X-Master-Key": JSONBIN_API_KEY
+        }
+        payload = json.dumps({"data": data})
+        r = requests.put(jsonbin_url(bin_id), headers=headers, data=payload)
+        if r.status_code not in (200, 201):
+            logger.error(f"Failed to write bin {bin_id}: {r.text}")
     except Exception as e:
-        await update.message.reply_text("Something went wrong, please check your format.")
-        logger.error(e)
+        logger.error(f"Error saving bin {bin_id}: {e}")
 
-# --- List schedules command ---
-async def list_schedules(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+# =========================
+# 4️⃣ MEMORY MANAGEMENT
+# =========================
+def update_memory(sender, message):
+    """Adds message to memory (only her + bot). Keeps last 200 messages."""
+    memory = load_json_from_bin(MEMORY_BIN_ID)
+    memory.append({"sender": sender, "message": message})
+    if len(memory) > 200:
+        memory = memory[-200:]
+    save_json_to_bin(MEMORY_BIN_ID, memory)
+
+def get_memory_context():
+    """Returns the conversation as text context for OpenAI."""
+    memory = load_json_from_bin(MEMORY_BIN_ID)
+    return "\n".join([f"{m['sender']}: {m['message']}" for m in memory])
+
+
+# =========================
+# 5️⃣ LOGGING SYSTEM
+# =========================
+def log_message(sender, message):
+    """Logs each message with timestamp to JSONBin."""
+    logs = load_json_from_bin(LOGS_BIN_ID)
+    logs.append({
+        "timestamp": datetime.now(SGT).strftime("%Y-%m-%dT%H:%M:%S"),
+        "sender": sender,
+        "message": message
+    })
+    save_json_to_bin(LOGS_BIN_ID, logs)
+
+
+# =========================
+# 6️⃣ /SENDLOG COMMAND
+# =========================
+async def sendlog(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Sends chat log summary and file (owner-only)."""
+    user_id = update.message.from_user.id
+    if user_id != OWNER_ID:
+        await update.message.reply_text("You’re not authorized to use this command.")
+        return
+
+    logs = load_json_from_bin(LOGS_BIN_ID)
+    total_msgs = len(logs)
+    last_time = logs[-1]["timestamp"] if logs else "N/A"
+
+    summary = (
+        f"📊 Chat Log Summary\n"
+        f"• Total messages: {total_msgs}\n"
+        f"• Last conversation: {last_time} (SGT)"
+    )
+    await update.message.reply_text(summary)
+
+    # Save logs temporarily to send as a file
+    temp_file = "chat_logs.json"
+    with open(temp_file, "w", encoding="utf-8") as f:
+        json.dump(logs, f, ensure_ascii=False, indent=2)
+    await context.bot.send_document(chat_id=OWNER_ID, document=InputFile(temp_file))
+
+
+# =========================
+# 7️⃣ SCHEDULER FUNCTIONS
+# =========================
+def load_schedules():
+    return load_json_from_bin(SCHEDULES_BIN_ID)
+
+def save_schedules(data):
+    save_json_to_bin(SCHEDULES_BIN_ID, data)
+
+async def send_scheduled_messages(context: ContextTypes.DEFAULT_TYPE):
+    """Sends due messages every 30 seconds."""
+    schedules = load_schedules()
+    now = datetime.now(SGT)
+    remaining = []
+
+    for sched in schedules:
+        send_time = datetime.fromisoformat(sched["time"])
+        if send_time <= now:
+            await context.bot.send_message(chat_id=sched["chat_id"], text=sched["message"])
+        else:
+            remaining.append(sched)
+
+    save_schedules(remaining)
+
+async def schedule(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """/schedule <minutes> <message>"""
+    try:
+        minutes = int(context.args[0])
+        message = " ".join(context.args[1:])
+        send_time = datetime.now(SGT) + timedelta(minutes=minutes)
+        data = load_schedules()
+        data.append({"time": send_time.isoformat(), "chat_id": update.message.chat_id, "message": message})
+        save_schedules(data)
+        await update.message.reply_text(f"Scheduled message in {minutes} minutes.")
+    except Exception as e:
+        await update.message.reply_text(f"Usage: /schedule <minutes> <message>\nError: {e}")
+
+async def listschedules(update: Update, context: ContextTypes.DEFAULT_TYPE):
     schedules = load_schedules()
     if not schedules:
         await update.message.reply_text("No scheduled messages.")
         return
+    text = "\n".join([f"{s['time']}: {s['message']}" for s in schedules])
+    await update.message.reply_text(f"🕒 Scheduled Messages:\n{text}")
 
-    text = "\n".join(
-        [f"{i+1}. {datetime.fromisoformat(s['time']).strftime('%Y-%m-%d %H:%M')} → {s['message']}"
-         for i, s in enumerate(schedules)]
-    )
-    await update.message.reply_text("📅 Scheduled messages:\n" + text)
+async def deleteschedule(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    save_schedules([])
+    await update.message.reply_text("All scheduled messages deleted.")
 
-# --- Delete schedule command ---
-async def delete_schedule(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+# =========================
+# 8️⃣ LOAD IDLE MESSAGES
+# =========================
+def load_idle_messages():
+    """Reads idle messages from idle_messages.txt (one per line)."""
     try:
-        index = int(context.args[0]) - 1
-        schedules = load_schedules()
-        if 0 <= index < len(schedules):
-            removed = schedules.pop(index)
-            save_schedules(schedules)
-            await update.message.reply_text(f"Deleted: {removed['message']}")
-        else:
-            await update.message.reply_text("Invalid index.")
+        if os.path.exists("idle_messages.txt"):
+            with open("idle_messages.txt", "r", encoding="utf-8") as f:
+                lines = [line.strip() for line in f.readlines() if line.strip()]
+                if lines:
+                    return lines
     except Exception as e:
-        await update.message.reply_text("Usage: /deleteschedule <index>")
-        logger.error(e)
+        logger.error(f"Error loading idle messages: {e}")
 
-# --- Normal reply (fine-tuned) ---
-async def reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Default fallback messages if file missing
+    return [
+        "You still there? 😊",
+        "Thinking about you a bit 😅",
+        "Miss chatting with you already."
+    ]
+
+
+# =========================
+# 9️⃣ MESSAGE HANDLER
+# =========================
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handles incoming user messages and replies with fine-tuned model."""
     user_message = update.message.text
-    logger.info(f"Received message: {user_message}")
 
-    # ~10% chance of sending idle message first
+    # Log + update memory
+    log_message("Her", user_message)
+    update_memory("Her", user_message)
+
+    # Retrieve conversation history
+    context_text = get_memory_context()
+
+    # Get reply from OpenAI
+    response = client.chat.completions.create(
+        model=MODEL_ID,
+        messages=[
+            {"role": "system", "content": "You are Hiro, responding naturally and warmly."},
+            {"role": "user", "content": context_text + f"\nHer: {user_message}\nHiro:"}
+        ],
+        max_tokens=150
+    )
+
+    reply_text = response.choices[0].message.content.strip()
+    log_message("HiroBot", reply_text)
+    update_memory("HiroBot", reply_text)
+    await update.message.reply_text(reply_text)
+
+    # Idle message chance (10%)
     if random.random() < 0.1:
-        idle_messages = [
-            "Hey, I'm in the middle of something right now. I’ll text you soon, okay?",
-            "Sorry, I'm a little busy at the moment. Will reply properly in a bit.",
-            "Give me a short while, I’ll message you soon."
-        ]
-        await update.message.reply_text(random.choice(idle_messages))
-        return
+        idle_msgs = load_idle_messages()
+        idle_reply = random.choice(idle_msgs)
+        log_message("HiroBot", idle_reply)
+        update_memory("HiroBot", idle_reply)
+        await update.message.reply_text(idle_reply)
 
-    try:
-        completion = client.chat.completions.create(
-            model=FINE_TUNE_MODEL,
-            messages=[
-                {"role": "system", "content": "You are Hiro, replying naturally to your girlfriend in a kind and genuine tone."},
-                {"role": "user", "content": user_message},
-            ],
-            temperature=0.8,
-            max_tokens=150
-        )
 
-        reply_text = completion.choices[0].message.content.strip()
-        await update.message.reply_text(reply_text)
-        logger.info(f"Replied: {reply_text}")
-
-    except Exception as e:
-        logger.error(f"Error: {e}")
-        await update.message.reply_text("Hmm, something went wrong just now. Try again later?")
-
-# --- Main setup ---
+# =========================
+# 🔟 MAIN ENTRY POINT
+# =========================
 async def main():
+    """Builds and starts the Telegram bot."""
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
-    app.add_handler(CommandHandler("schedule", schedule_command))
-    app.add_handler(CommandHandler("listschedules", list_schedules))
-    app.add_handler(CommandHandler("deleteschedule", delete_schedule))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, reply))
+    # Commands
+    app.add_handler(CommandHandler("schedule", schedule))
+    app.add_handler(CommandHandler("listschedules", listschedules))
+    app.add_handler(CommandHandler("deleteschedule", deleteschedule))
+    app.add_handler(CommandHandler("sendlog", sendlog))
 
-    asyncio.create_task(send_scheduled_messages(app))
+    # Messages
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+
+    # Schedule job every 30 seconds
+    job_queue = app.job_queue
+    job_queue.run_repeating(send_scheduled_messages, interval=30, first=10)
+
     logger.info("💬 Hiro mimic bot running (SGT).")
     await app.run_polling()
 
+
 if __name__ == "__main__":
-    import platform
-    import sys
-    if sys.platform == "darwin" and platform.system() == "Darwin":
-        # macOS: event loop fix
-        import asyncio
-        try:
-            asyncio.get_event_loop().run_until_complete(main())
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            loop.run_until_complete(main())
-    else:
-        asyncio.run(main())
+    import asyncio
+    asyncio.run(main())

@@ -165,6 +165,11 @@ async def sendlog(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # =========================
 # 7️⃣ SCHEDULER FUNCTIONS
 # =========================
+from datetime import datetime, timedelta
+import pytz
+
+SGT = pytz.timezone("Asia/Singapore")
+
 def load_schedules():
     return load_json_from_bin(SCHEDULES_BIN_ID)
 
@@ -186,18 +191,46 @@ async def send_scheduled_messages(context: ContextTypes.DEFAULT_TYPE):
 
     save_schedules(remaining)
 
+# ✅ NEW VERSION: supports YYYY-MM-DD HH:MM format
 async def schedule(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """/schedule <minutes> <message>"""
+    """
+    Usage:
+      /schedule YYYY-MM-DD HH:MM message text here
+    """
     try:
-        minutes = int(context.args[0])
-        message = " ".join(context.args[1:])
-        send_time = datetime.now(SGT) + timedelta(minutes=minutes)
+        if len(context.args) < 3:
+            await update.message.reply_text(
+                "Usage: /schedule YYYY-MM-DD HH:MM message"
+            )
+            return
+
+        date_str = context.args[0]
+        time_str = context.args[1]
+        message = " ".join(context.args[2:])
+
+        # Parse to datetime in Singapore time
+        send_time = SGT.localize(datetime.strptime(f"{date_str} {time_str}", "%Y-%m-%d %H:%M"))
+        now = datetime.now(SGT)
+
+        if send_time <= now:
+            await update.message.reply_text("That time already pass liao 😅 choose a future time.")
+            return
+
+        # Save schedule persistently
         data = load_schedules()
-        data.append({"time": send_time.isoformat(), "chat_id": update.message.chat_id, "message": message})
+        data.append({
+            "time": send_time.isoformat(),
+            "chat_id": update.message.chat_id,
+            "message": message
+        })
         save_schedules(data)
-        await update.message.reply_text(f"Scheduled message in {minutes} minutes.")
+
+        await update.message.reply_text(
+            f"✅ Scheduled for {send_time.strftime('%Y-%m-%d %H:%M %Z')}:\n“{message}”"
+        )
+
     except Exception as e:
-        await update.message.reply_text(f"Usage: /schedule <minutes> <message>\nError: {e}")
+        await update.message.reply_text(f"⚠️ Error: {e}")
 
 async def listschedules(update: Update, context: ContextTypes.DEFAULT_TYPE):
     schedules = load_schedules()

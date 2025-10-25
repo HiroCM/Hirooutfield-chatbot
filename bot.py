@@ -275,9 +275,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # =========================
 # 🔟 MAIN ENTRY POINT
 # =========================
-async def main():
-    """Builds and starts the Telegram bot."""
+def main():
     app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
+    ...
+    app.run_polling()
 
     # Commands
     app.add_handler(CommandHandler("schedule", schedule))
@@ -297,16 +298,4 @@ async def main():
 
 
 if __name__ == "__main__":
-    import asyncio
-
-    try:
-        loop = asyncio.get_event_loop()
-        loop.run_until_complete(main())
-    except RuntimeError as e:
-        if "event loop is already running" in str(e):
-            # Render or Jupyter case — just create a task instead
-            loop = asyncio.get_event_loop()
-            loop.create_task(main())
-            loop.run_forever()
-        else:
-            raise
+    main()

@@ -303,6 +303,7 @@ if __name__ == "__main__":
         asyncio.run(main())
     except RuntimeError as e:
         if "event loop is already running" in str(e):
+            # Reuse existing loop (common in Render and notebooks)
             loop = asyncio.get_event_loop()
             loop.create_task(main())
             loop.run_forever()

@@ -97,7 +97,7 @@ SGT = pytz.timezone("Asia/Singapore")
 # 3️⃣ PERSONALIZATION KNOBS
 # =========================
 # Nickname variants (randomly chosen per outward message to Jennifer)
-NICKNAMES = ["babe", "baby", "my love"]
+NICKNAMES = ["babe", "baby", "my love" , "babycakes"]
 
 # Light emoji palette; occasionally duplicated
 EMOJIS_SOFT = ["🥺", "🥰", "❤️", "💗", "🫶", "✨", "😊"]
@@ -110,6 +110,9 @@ GIRLFRIEND_PROFILE = {
     "short_bio": (
         "Loving, sensitive, and warm. She appreciates reassurance and gentle affection. "
         "She prefers being called 'babe', 'baby', or 'my love' — avoid 'Jennifer'."
+        "She has 6 cats that are named 'Maya', 'Emmie', 'Jasmine', 'Narnia', 'Cookie', 'Koko'."
+        "She and Hiro treats koko like their son."
+        "She works as pre school teacher, and she calls her children her 'kids'."
     ),
 }
 

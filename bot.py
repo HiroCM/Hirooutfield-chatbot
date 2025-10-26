@@ -450,64 +450,54 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
 # =========================
-# 🆘 /HELP COMMAND (Auto-hide + Timer Reset on Interaction)
+# 🆘 /HELP COMMAND (ADMIN ONLY)
 # =========================
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import CallbackQueryHandler
-import asyncio
 
-# Keep track of help messages so we can cancel timers if interacted with
-active_help_timers = {}
-
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Shows all available admin commands with inline buttons, auto-hides after 30s."""
+async def show_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_authorized(update):
-        await update.message.reply_text("❌ You’re not authorized to use this command.")
-        return
-
-    help_text = (
-        "🧭 *Hiro Mimic Bot — Admin Panel*\n\n"
-        "💌 *Scheduling & Messaging*\n"
-        "• /schedule — Schedule a message for Babe ❤️\n"
-        "• /listschedules — View & edit upcoming messages\n"
-        "• /deleteschedule — Delete all scheduled messages\n\n"
-        "📋 *Logs & Info*\n"
-        "• /sendlog — Get chat logs\n"
-        "• /lastseen — See when Babe last messaged\n\n"
-        "⚙️ *Debug Tools*\n"
-        "• /debug on / off — Toggle debug mode (for testing)\n\n"
-        "_Tap a button below for quick help. This card will auto-hide after 30s of inactivity._"
-    )
+        return  # ignore non-admin users
 
     keyboard = [
-        [
-            InlineKeyboardButton("📅 Schedule", callback_data="help_schedule"),
-            InlineKeyboardButton("🕒 List", callback_data="help_list"),
-        ],
-        [
-            InlineKeyboardButton("🧹 Delete All", callback_data="help_delete"),
-            InlineKeyboardButton("📜 Logs", callback_data="help_logs"),
-        ],
-        [
-            InlineKeyboardButton("👀 Last Seen", callback_data="help_lastseen"),
-            InlineKeyboardButton("🔧 Debug", callback_data="help_debug"),
-        ],
+        [InlineKeyboardButton("📅 Schedule", callback_data="help_schedule")],
+        [InlineKeyboardButton("🕒 List", callback_data="help_list")],
+        [InlineKeyboardButton("🧹 Delete All", callback_data="help_delete")],
+        [InlineKeyboardButton("📂 Logs", callback_data="help_logs")],
+        [InlineKeyboardButton("👀 Last Seen", callback_data="help_seen")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    sent_message = await update.message.reply_text(help_text, parse_mode="Markdown", reply_markup=reply_markup)
+    msg = await update.message.reply_text(
+        "🧭 **HiroBot Admin Help Menu**\n\n"
+        "Tap any button to learn what each command does.",
+        reply_markup=reply_markup,
+        parse_mode="Markdown"
+    )
 
-    # Schedule auto-delete after 30s
-    async def auto_delete():
-        await asyncio.sleep(30)
-        if sent_message.message_id in active_help_timers:
-            try:
-                await sent_message.delete()
-                del active_help_timers[sent_message.message_id]
-            except:
-                pass
+    # Auto-delete help message after 30 seconds to keep chat clean
+    await asyncio.sleep(30)
+    try:
+        await msg.delete()
+    except:
+        pass
 
-    active_help_timers[sent_message.message_id] = asyncio.create_task(auto_delete())
+async def help_button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    data = query.data
+
+    explanations = {
+        "help_schedule": "📅 `/schedule YYYY-MM-DD HH:MM message`\nCreate a message to send to her at a specific time.",
+        "help_list": "🕒 `/listschedules`\nView all scheduled messages.",
+        "help_delete": "🧹 `/deleteschedule`\nClear *all* scheduled messages.",
+        "help_logs": "📂 `/sendlog`\nSend full conversation logs as a JSON file.",
+        "help_seen": "👀 `/lastseen`\nCheck when she last interacted with the bot."
+    }
+
+    await query.answer()  # close the loading spinner
+    await query.edit_message_text(
+        text=explanations.get(data, "Unknown command."),
+        parse_mode="Markdown"
+    )
 
 
 # =========================
@@ -728,6 +718,8 @@ def main():
     app.add_handler(CommandHandler("sendlog", sendlog))
     app.add_handler(CommandHandler("help", help_command))
     app.add_handler(CallbackQueryHandler(help_callback))
+    app.add_handler(CommandHandler("help", show_help))
+    app.add_handler(CallbackQueryHandler(help_button_callback))
 
     # Inline callbacks
     app.add_handler(CallbackQueryHandler(on_callback))

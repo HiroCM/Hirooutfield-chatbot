@@ -450,6 +450,104 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
 # =========================
+# 🆘 /HELP COMMAND (Auto-hide + Timer Reset on Interaction)
+# =========================
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import CallbackQueryHandler
+import asyncio
+
+# Keep track of help messages so we can cancel timers if interacted with
+active_help_timers = {}
+
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Shows all available admin commands with inline buttons, auto-hides after 30s."""
+    if not is_authorized(update):
+        await update.message.reply_text("❌ You’re not authorized to use this command.")
+        return
+
+    help_text = (
+        "🧭 *Hiro Mimic Bot — Admin Panel*\n\n"
+        "💌 *Scheduling & Messaging*\n"
+        "• /schedule — Schedule a message for Babe ❤️\n"
+        "• /listschedules — View & edit upcoming messages\n"
+        "• /deleteschedule — Delete all scheduled messages\n\n"
+        "📋 *Logs & Info*\n"
+        "• /sendlog — Get chat logs\n"
+        "• /lastseen — See when Babe last messaged\n\n"
+        "⚙️ *Debug Tools*\n"
+        "• /debug on / off — Toggle debug mode (for testing)\n\n"
+        "_Tap a button below for quick help. This card will auto-hide after 30s of inactivity._"
+    )
+
+    keyboard = [
+        [
+            InlineKeyboardButton("📅 Schedule", callback_data="help_schedule"),
+            InlineKeyboardButton("🕒 List", callback_data="help_list"),
+        ],
+        [
+            InlineKeyboardButton("🧹 Delete All", callback_data="help_delete"),
+            InlineKeyboardButton("📜 Logs", callback_data="help_logs"),
+        ],
+        [
+            InlineKeyboardButton("👀 Last Seen", callback_data="help_lastseen"),
+            InlineKeyboardButton("🔧 Debug", callback_data="help_debug"),
+        ],
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    sent_message = await update.message.reply_text(help_text, parse_mode="Markdown", reply_markup=reply_markup)
+
+    # Schedule auto-delete after 30s
+    async def auto_delete():
+        await asyncio.sleep(30)
+        if sent_message.message_id in active_help_timers:
+            try:
+                await sent_message.delete()
+                del active_help_timers[sent_message.message_id]
+            except:
+                pass
+
+    active_help_timers[sent_message.message_id] = asyncio.create_task(auto_delete())
+
+
+# =========================
+# 🎛 CALLBACK HANDLER FOR /HELP BUTTONS
+# =========================
+async def help_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Responds to button clicks from /help and resets the 30s timer."""
+    query = update.callback_query
+    await query.answer()
+
+    # Cancel existing timer and restart countdown
+    if query.message.message_id in active_help_timers:
+        active_help_timers[query.message.message_id].cancel()
+        del active_help_timers[query.message.message_id]
+
+    button_map = {
+        "help_schedule": "Use /schedule YYYY-MM-DD HH:MM <message> to schedule a message for Babe ❤️",
+        "help_list": "Run /listschedules to view all upcoming messages and edit them easily.",
+        "help_delete": "Run /deleteschedule to clear *all* scheduled messages.",
+        "help_logs": "Use /sendlog to get a chat log summary + JSON export.",
+        "help_lastseen": "Use /lastseen to see when Babe last messaged the bot 🕓",
+        "help_debug": "Run /debug on or /debug off to toggle memory tracking.",
+    }
+
+    message = button_map.get(query.data, "Command not recognized.")
+
+    await query.edit_message_text(f"ℹ️ {message}", parse_mode="Markdown")
+
+    # Restart auto-hide timer for 30s again
+    async def reset_timer():
+        await asyncio.sleep(30)
+        if query.message:
+            try:
+                await query.message.delete()
+            except:
+                pass
+
+    active_help_timers[query.message.message_id] = asyncio.create_task(reset_timer())
+    
+# =========================
 # 🔟 MESSAGE HANDLER (Chat)
 # =========================
 def should_use_playful(text: str) -> bool:
@@ -628,6 +726,8 @@ def main():
     app.add_handler(CommandHandler("schedule_list", cmd_schedule_list))
     app.add_handler(CommandHandler("deleteschedule", cmd_deleteschedule_all))
     app.add_handler(CommandHandler("sendlog", sendlog))
+    app.add_handler(CommandHandler("help", help_command))
+    app.add_handler(CallbackQueryHandler(help_callback))
 
     # Inline callbacks
     app.add_handler(CallbackQueryHandler(on_callback))

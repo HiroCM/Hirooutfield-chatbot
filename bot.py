@@ -40,9 +40,7 @@ load_dotenv()
 
 TOKEN = os.getenv("BOT_TOKEN")
 
-if not TOKEN:
-    raise ValueError("❌ BOT_TOKEN not found in environment")
-
+# ✅ Create the app instance BEFORE adding handlers
 app = Application.builder().token(TOKEN).build()
 
 from telegram import (
@@ -513,7 +511,6 @@ async def help_button_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         parse_mode="HTML"
     )
 
-
 # =========================
 # 🎛 CALLBACK HANDLER FOR /HELP BUTTONS
 # =========================
@@ -718,9 +715,11 @@ async def sendlog(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # =========================
 # 1️⃣2️⃣ MAIN
 # =========================
+def :
     app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 
     # Commands
+    app.add_handler(CommandHandler("help", cmd_help))
     app.add_handler(CommandHandler("debug_on", cmd_debug_on))
     app.add_handler(CommandHandler("debug_off", cmd_debug_off))
     app.add_handler(CommandHandler("lastseen", cmd_lastseen))
@@ -736,14 +735,6 @@ async def sendlog(update: Update, context: ContextTypes.DEFAULT_TYPE):
     app.add_handler(CallbackQueryHandler(on_callback))
 
     # Messages
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-
-    # Job: check scheduled deliveries
-    job_queue = app.job_queue
-    job_queue.run_repeating(send_scheduled_messages, interval=30, first=10)
-
-    logger.info("💬 Hiro mimic bot running (SGT).")
-    
 
 # --------------------------------------
 # Unknown command fallback (playful tone)
@@ -752,21 +743,34 @@ async def unknown_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = "Hehe I blur liao 😅 I don’t quite get what you mean… maybe try /help baby? 💕"
     await update.message.reply_text(msg)
 
-app.add_handler(MessageHandler(filters.COMMAND, unknown_command))
 
 
 # --------------------------------------
-# Unknown command fallback (playful tone)
+# 🔔 Notify admin on bot startup
 # --------------------------------------
-async def unknown_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    msg = "Hehe I blur liao 😅 I don’t quite get what you mean… maybe try /help baby? 💕"
-    await update.message.reply_text(msg)
+async def notify_startup(application):
+    """Notify admin that the bot has restarted."""
+    try:
+        await application.bot.send_message(chat_id=ADMIN_CHAT_ID, text="🤖 Bot restarted and ready!")
+        print("✅ Sent startup notification to admin.")
+    except Exception as e:
+        print(f"⚠️ Failed to notify admin: {e}")
 
 
 if __name__ == "__main__":
-    # ✅ Add fallback for unknown commands
+    # ✅ Re-register commands safely
+    app.add_handler(CommandHandler("help", show_help))
+    app.add_handler(CommandHandler("debug_on", cmd_debug_on))
+    app.add_handler(CommandHandler("debug_off", cmd_debug_off))
+    app.add_handler(CommandHandler("lastseen", cmd_lastseen))
+    app.add_handler(CommandHandler("schedule", cmd_schedule))
+    app.add_handler(CommandHandler("schedule_list", cmd_schedule_list))
+    app.add_handler(CommandHandler("deleteschedule", cmd_deleteschedule_all))
+    app.add_handler(CommandHandler("sendlog", sendlog))
+
+    # ✅ Fallback for unknown commands (MUST be last)
     app.add_handler(MessageHandler(filters.COMMAND, unknown_command))
 
-    # ✅ Run the bot
+    app.post_init = notify_startup
     print("💬 Starting Hiro Telegram bot (Render deployment)...")
     app.run_polling()

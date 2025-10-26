@@ -27,6 +27,19 @@ import random
 import logging
 import requests
 import asyncio
+
+# --------------------------------------
+# 🔐 Authorization check helper
+# --------------------------------------
+def is_authorized(update):
+    """Check if the user issuing the command is allowed to use the bot."""
+    authorized_users = [713470736, int(os.getenv("ADMIN_CHAT_ID", "713470736"))]
+    user_id = update.effective_user.id if update.effective_user else None
+    if user_id in authorized_users:
+        return True
+    print(f"🚫 Unauthorized user tried to use bot: {user_id}")
+    return False
+
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -697,7 +710,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # =========================
 # 1️⃣1️⃣ /SENDLOG (Admin)
 # =========================
-async def sendlog(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def sendlog(update, context):
+    if not is_authorized(update):
+        await update.message.reply_text("🚫 Sorry, only my admin can use this command!")
+        return
+    if not is_authorized(update):
+        await update.message.reply_text("🚫 Sorry, you’re not authorized to do that.")
+        return
     if not is_admin(update):
         return
 
@@ -743,13 +762,9 @@ async def unknown_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = "Hehe I blur liao 😅 I don’t quite get what you mean… maybe try /help baby? 💕"
     await update.message.reply_text(msg)
 
-
-
 # --------------------------------------
 # 🔔 Notify admin on bot startup
 # --------------------------------------
-
-
 
 # --------------------------------------
 # 🔔 Notify admin on bot startup
@@ -761,7 +776,6 @@ async def notify_startup(application):
         print("✅ Sent startup notification to admin.")
     except Exception as e:
         print(f"⚠️ Failed to notify admin: {e}")
-
 
 if __name__ == "__main__":
     # ✅ Re-register commands safely

@@ -715,7 +715,7 @@ async def sendlog(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # =========================
 # 1️⃣2️⃣ MAIN
 # =========================
-def :
+
     app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 
     # Commands
@@ -742,6 +742,12 @@ def :
 async def unknown_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = "Hehe I blur liao 😅 I don’t quite get what you mean… maybe try /help baby? 💕"
     await update.message.reply_text(msg)
+
+
+
+# --------------------------------------
+# 🔔 Notify admin on bot startup
+# --------------------------------------
 
 
 

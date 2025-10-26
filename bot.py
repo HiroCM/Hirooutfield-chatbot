@@ -317,21 +317,21 @@ async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/debug_on  |  /debug_off\n"
         "    Toggle debug mode (skip admin memory/logging when ON).\n"
     )
-    await update.message.reply_text(txt, disable_web_page_preview=True, parse_mode="Markdown")
+    await update.message.reply_text(txt, disable_web_page_preview=True, parse_mode="HTML")
 
 async def cmd_debug_on(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global DEBUG_MODE
     if not is_admin(update):
         return
     DEBUG_MODE = True
-    await update.message.reply_text("🧪 Debug mode *ON* — admin messages won’t be saved to memory/logs.", parse_mode="Markdown")
+    await update.message.reply_text("🧪 Debug mode *ON* — admin messages won’t be saved to memory/logs.", parse_mode="HTML")
 
 async def cmd_debug_off(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global DEBUG_MODE
     if not is_admin(update):
         return
     DEBUG_MODE = False
-    await update.message.reply_text("🧪 Debug mode *OFF* — normal behavior restored.", parse_mode="Markdown")
+    await update.message.reply_text("🧪 Debug mode *OFF* — normal behavior restored.", parse_mode="HTML")
 
 async def cmd_lastseen(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update):
@@ -409,7 +409,7 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         item = items[idx]
         t_str = datetime.fromisoformat(item["time"]).astimezone(SGT).strftime("%A, %d %B %Y at %I:%M %p %Z")
         text = f"*Schedule {idx}*\n• When: {t_str}\n• To: her (fixed)\n• Message:\n{item['message']}"
-        await q.edit_message_text(text, reply_markup=detail_markup(idx), parse_mode="Markdown")
+        await q.edit_message_text(text, reply_markup=detail_markup(idx), parse_mode="HTML")
         return
 
     if data.startswith("edit_time:"):
@@ -420,7 +420,7 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ADMIN_STATE[ADMIN_CHAT_ID] = {"mode": "edit_time", "index": idx}
         await q.edit_message_text(
             f"Editing time for #{idx}.\n\nReply with *one line*:\n`YYYY-MM-DD HH:MM`  (24h)  *or*  `YYYY-MM-DD 8:30PM`",
-            parse_mode="Markdown"
+            parse_mode="HTML"
         )
         return
 
@@ -432,7 +432,7 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ADMIN_STATE[ADMIN_CHAT_ID] = {"mode": "edit_msg", "index": idx}
         await q.edit_message_text(
             f"Editing message for #{idx}.\n\nReply with the *new message* (one message).",
-            parse_mode="Markdown"
+            parse_mode="HTML"
         )
         return
 
@@ -471,7 +471,7 @@ async def show_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "🧭 **HiroBot Admin Help Menu**\n\n"
         "Tap any button to learn what each command does.",
         reply_markup=reply_markup,
-        parse_mode="Markdown"
+        parse_mode="HTML"
     )
 
     # Auto-delete help message after 30 seconds to keep chat clean
@@ -496,7 +496,7 @@ async def help_button_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     await query.answer()  # close the loading spinner
     await query.edit_message_text(
         text=explanations.get(data, "Unknown command."),
-        parse_mode="Markdown"
+        parse_mode="HTML"
     )
 
 
@@ -524,7 +524,7 @@ async def help_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     message = button_map.get(query.data, "Command not recognized.")
 
-    await query.edit_message_text(f"ℹ️ {message}", parse_mode="Markdown")
+    await query.edit_message_text(f"ℹ️ {message}", parse_mode="HTML")
 
     # Restart auto-hide timer for 30s again
     async def reset_timer():
@@ -579,7 +579,7 @@ async def handle_admin_edit_reply(update: Update, context: ContextTypes.DEFAULT_
             text = update.message.text.strip()
             parts = text.split()
             if len(parts) != 2:
-                await update.message.reply_text("Please send exactly: `YYYY-MM-DD HH:MM` (24h) or `YYYY-MM-DD 8:30PM`", parse_mode="Markdown")
+                await update.message.reply_text("Please send exactly: `YYYY-MM-DD HH:MM` (24h) or `YYYY-MM-DD 8:30PM`", parse_mode="HTML")
                 return True
             new_dt = parse_datetime_safely(parts[0], parts[1])
             new_dt = SGT.localize(new_dt)
@@ -717,6 +717,7 @@ def main():
     app.add_handler(CommandHandler("deleteschedule", cmd_deleteschedule_all))
     app.add_handler(CommandHandler("sendlog", sendlog))
     app.add_handler(CommandHandler("help", show_help))
+    app.add_handler(CallbackQueryHandler(handle_schedule_callback))
     app.add_handler(CallbackQueryHandler(help_button_callback))
 
     # Inline callbacks
@@ -730,6 +731,16 @@ def main():
     job_queue.run_repeating(send_scheduled_messages, interval=30, first=10)
 
     logger.info("💬 Hiro mimic bot running (SGT).")
+    
+# --------------------------------------
+# Unknown command fallback (playful tone)
+# --------------------------------------
+async def unknown_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    msg = "Hehe I blur liao 😅 I don’t quite get what you mean… maybe try /help baby? 💕"
+    await update.message.reply_text(msg)
+
+app.add_handler(MessageHandler(filters.COMMAND, unknown_command))
+
     app.run_polling()
 
 if __name__ == "__main__":

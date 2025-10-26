@@ -157,7 +157,7 @@ def update_memory(sender, message):
 
 def get_memory_context():
     memory = load_json_from_bin(MEMORY_BIN_ID)
-    return "\n".join([f\"{m['sender']}: {m['message']}\" for m in memory])
+    return "\n".join([f"{m['sender']}: {m['message']}" for m in memory])
 
 def log_message(sender, message):
     logs = load_json_from_bin(LOGS_BIN_ID)

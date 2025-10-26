@@ -716,8 +716,6 @@ def main():
     app.add_handler(CommandHandler("schedule_list", cmd_schedule_list))
     app.add_handler(CommandHandler("deleteschedule", cmd_deleteschedule_all))
     app.add_handler(CommandHandler("sendlog", sendlog))
-    app.add_handler(CommandHandler("help", help_command))
-    app.add_handler(CallbackQueryHandler(help_callback))
     app.add_handler(CommandHandler("help", show_help))
     app.add_handler(CallbackQueryHandler(help_button_callback))
 

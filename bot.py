@@ -40,7 +40,9 @@ load_dotenv()
 
 TOKEN = os.getenv("BOT_TOKEN")
 
-# ✅ Create the app instance BEFORE adding handlers
+if not TOKEN:
+    raise ValueError("❌ BOT_TOKEN not found in environment")
+
 app = Application.builder().token(TOKEN).build()
 
 from telegram import (

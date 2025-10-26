@@ -31,6 +31,18 @@ from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from openai import OpenAI
 
+from telegram.ext import Application, CommandHandler, MessageHandler, filters
+
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
+
+TOKEN = os.getenv("BOT_TOKEN")
+
+# ✅ Create the app instance BEFORE adding handlers
+app = Application.builder().token(TOKEN).build()
+
 from telegram import (
     Update,
     InputFile,

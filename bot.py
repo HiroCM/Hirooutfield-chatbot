@@ -732,6 +732,7 @@ def main():
 
     logger.info("💬 Hiro mimic bot running (SGT).")
     
+
 # --------------------------------------
 # Unknown command fallback (playful tone)
 # --------------------------------------
@@ -741,7 +742,9 @@ async def unknown_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 app.add_handler(MessageHandler(filters.COMMAND, unknown_command))
 
-    app.run_polling()
+# ---- Run bot ----
+app.run_polling()
+
 
 if __name__ == "__main__":
     main()

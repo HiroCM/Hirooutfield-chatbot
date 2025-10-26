@@ -716,11 +716,9 @@ async def sendlog(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # =========================
 # 1️⃣2️⃣ MAIN
 # =========================
-def main():
     app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 
     # Commands
-    app.add_handler(CommandHandler("help", cmd_help))
     app.add_handler(CommandHandler("debug_on", cmd_debug_on))
     app.add_handler(CommandHandler("debug_off", cmd_debug_off))
     app.add_handler(CommandHandler("lastseen", cmd_lastseen))
@@ -754,9 +752,19 @@ async def unknown_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 app.add_handler(MessageHandler(filters.COMMAND, unknown_command))
 
-# ---- Run bot ----
-app.run_polling()
+
+# --------------------------------------
+# Unknown command fallback (playful tone)
+# --------------------------------------
+async def unknown_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    msg = "Hehe I blur liao 😅 I don’t quite get what you mean… maybe try /help baby? 💕"
+    await update.message.reply_text(msg)
 
 
 if __name__ == "__main__":
-    main()
+    # ✅ Add fallback for unknown commands
+    app.add_handler(MessageHandler(filters.COMMAND, unknown_command))
+
+    # ✅ Run the bot
+    print("💬 Starting Hiro Telegram bot (Render deployment)...")
+    app.run_polling()
